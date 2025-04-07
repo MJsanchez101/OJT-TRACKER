@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OJT Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        /* Dropdown hover effect */
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        .dropdown-content {
+            display: none; /* Hide by default */
+        }
+
+        /* Print specific styles */
+        @media print {
+            body * {
+                visibility: hidden; /* Hide everything by default */
+            }
+            #printArea, #printArea * {
+                visibility: visible; /* Show only the print area and its contents */
+            }
+            #printArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 10px; /* Add some padding for print */
+                border: none; /* Remove border for print */
+                font-size: 12pt; /* Adjust font size for print */
+            }
+             /* Hide buttons and other non-essential elements within printArea if needed */
+            #printArea button {
+                 display: none;
+             }
+             /* Ensure background colors don't print unless desired */
+             #printArea span[class*="bg-"] {
+                 color-adjust: exact; /* Try to force color printing */
+                 -webkit-print-color-adjust: exact; /* For Chrome/Safari */
+                 background-color: transparent !important; /* Often better to remove bg */
+                 color: black !important; /* Ensure text is visible */
+                 border: 1px solid #ccc; /* Add border for visibility */
+                 padding-left: 4px;
+                 padding-right: 4px;
+             }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+    <nav class="bg-blue-600 text-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold">OJT Tracker</h1>
+            <div class="flex items-center space-x-3">
+                <span id="totalHours" class="mr-4 text-sm">Total Hours: 0.00</span>
+                <div class="dropdown relative inline-block">
+                    <button class="bg-blue-700 hover:bg-blue-800 px-3 py-1 rounded text-sm transition focus:outline-none">
+                        <i class="fas fa-download mr-1"></i> Export <i class="fas fa-caret-down ml-1"></i>
+                    </button>
+                    <div class="dropdown-content hidden absolute right-0 bg-white text-gray-800 shadow-lg rounded mt-1 w-40 z-10 py-1">
+                        <a href="#" id="exportPDF" class="block px-4 py-2 text-sm hover:bg-gray-100 whitespace-nowrap"><i class="far fa-file-pdf mr-2 text-red-600"></i>Export All (PDF)</a>
+                        <a href="#" id="exportCSV" class="block px-4 py-2 text-sm hover:bg-gray-100 whitespace-nowrap"><i class="far fa-file-excel mr-2 text-green-600"></i>Export All (CSV)</a>
+                    </div>
+                </div>
+                <button id="resetButton" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm transition focus:outline-none">
+                    <i class="fas fa-trash-alt mr-1"></i> Reset Data
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto p-4 flex-grow">
+        <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-3 rounded mb-4 shadow-sm text-sm">
+            <p><i class="fas fa-info-circle mr-2"></i>A 1-hour lunch break (12:00 PM - 1:00 PM) is automatically excluded if your work hours span this entire period.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Time Tracking</h2>
+
+                <form id="entryForm">
+                    <div class="mb-4">
+                        <label for="currentDate" class="block text-sm font-medium text-gray-700 mb-1">Date:</label>
+                        <input type="date" id="currentDate" name="currentDate" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="timeIn" class="block text-sm font-medium text-gray-700 mb-1">Time In:</label>
+                            <input type="time" id="timeIn" name="timeIn" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label for="timeOut" class="block text-sm font-medium text-gray-700 mb-1">Time Out:</label>
+                            <input type="time" id="timeOut" name="timeOut" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Activities Done:</label>
+                        <div id="activityList" class="mb-2 space-y-2">
+                            <div class="flex items-center">
+                                <input type="text" class="activity-input w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter an activity...">
+                                <button type="button" class="remove-activity ml-2 text-red-500 hover:text-red-700 focus:outline-none" title="Remove activity"><i class="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                        <button type="button" id="addActivityBtn" class="text-blue-600 hover:text-blue-800 text-sm mt-1 focus:outline-none">
+                            <i class="fas fa-plus-circle mr-1"></i> Add another activity
+                        </button>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Status:</label>
+                        <select id="status" name="status" class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="present">Present</option>
+                            <option value="late">Late</option>
+                            <option value="absent">Absent</option>
+                            <option value="holiday">Holiday</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" id="saveButton" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition mt-4 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        <i class="fas fa-save mr-2"></i>Save Entry
+                    </button>
+                    <button type="button" id="clearFormButton" class="w-full bg-gray-500 text-white py-2 rounded hover:bg-gray-600 transition mt-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
+                        <i class="fas fa-undo mr-2"></i>Clear Form / Cancel Edit
+                    </button>
+                </form>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-md p-6 flex flex-col">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Records</h2>
+
+                <div class="mb-4 flex">
+                    <input type="text" id="searchInput" placeholder="Search records (date, status, activity)..." class="w-full p-2 border border-gray-300 rounded-l focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <button id="clearSearchBtn" class="bg-gray-200 px-3 rounded-r border-t border-r border-b border-gray-300 hover:bg-gray-300 focus:outline-none" title="Clear search">
+                        <i class="fas fa-times text-gray-600"></i>
+                    </button>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex justify-between items-center text-sm">
+                        <label for="monthFilter" class="text-gray-600">Filter by month:</label>
+                        <button id="clearFilterBtn" class="text-blue-600 hover:text-blue-800 focus:outline-none hidden text-xs">Clear Filter</button>
+                    </div>
+                    <select id="monthFilter" class="w-full p-2 border border-gray-300 rounded mt-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                        <option value="">All Months</option>
+                        <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                        <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                        <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+                        <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                    </select>
+                </div>
+
+                <div id="recordsList" class="flex-grow max-h-96 overflow-y-auto border rounded p-2 bg-gray-50">
+                    <div class="text-gray-500 text-center py-8">No records yet. Add an entry!</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="detailsModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-50 p-4">
+            <div class="bg-white rounded-lg w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="text-xl font-semibold text-gray-800">Entry Details</h3>
+                    <button id="closeModal" class="text-gray-500 hover:text-gray-700 text-2xl focus:outline-none">&times;</button>
+                </div>
+                <div id="modalContent" class="space-y-3 text-sm text-gray-700">
+                    </div>
+                <div class="flex justify-end mt-6 space-x-2 border-t pt-4">
+                    <button id="printButton" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400">
+                        <i class="fas fa-print mr-1"></i> Print/PDF (This Entry)
+                    </button>
+                    <button id="editButton" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-yellow-400">
+                        <i class="fas fa-edit mr-1"></i> Edit
+                    </button>
+                    <button id="deleteButton" class="bg-red-500 text-white px-4 py-2 rounded text-sm hover:bg-red-600 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-400">
+                        <i class="fas fa-trash mr-1"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="printPreviewModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center hidden z-[60] p-4">
+             <div class="bg-white rounded-lg w-full max-w-3xl p-6 max-h-[90vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h3 class="text-xl font-semibold text-gray-800">Print Preview / Download PDF</h3>
+                    <button id="closePrintModal" class="text-gray-500 hover:text-gray-700 text-2xl focus:outline-none">&times;</button>
+                </div>
+                <div id="printAreaWrapper" class="flex-grow overflow-y-auto border rounded p-4 bg-gray-50 mb-4">
+                     <div id="printArea" class="p-2 bg-white shadow-sm">
+                         </div>
+                </div>
+                <div class="flex justify-end space-x-2 border-t pt-4">
+                    <button id="actualPrintButton" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-400">
+                        <i class="fas fa-print mr-1"></i> Print Now
+                    </button>
+                    <button id="downloadPDFButton" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 transition focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-green-400">
+                        <i class="fas fa-file-pdf mr-1"></i> Download as PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-200 text-center p-4 mt-8 text-sm text-gray-600">
+        OJT Tracker Application - Track your training hours and activities.
+    </footer>
+
+ <script>
+     document.addEventListener('DOMContentLoaded', () => {
+        // --- Check for jsPDF and dependencies ---
+        if (typeof window.jspdf === 'undefined') {
+            console.error("jsPDF library not loaded!");
+            alert("Error: jsPDF library failed to load. PDF features will not work.");
+            // Optionally disable PDF buttons here
+        } else if (typeof window.jspdf.jsPDF.API.autoTable === 'undefined') {
+             console.error("jsPDF AutoTable plugin not loaded!");
+             alert("Error: jsPDF AutoTable plugin failed to load. PDF table export will not work.");
+             // Optionally disable PDF export button
+        }
+         if (typeof window.html2canvas === 'undefined') {
+             console.error("html2canvas library not loaded!");
+             alert("Error: html2canvas library failed to load. Single entry PDF download might not work correctly.");
+             // Optionally disable single PDF download button
+         }
+
+
+        // --- DOM Element References ---
+        const totalHoursSpan = document.getElementById('totalHours');
+        const exportPDFBtn = document.getElementById('exportPDF');
+        const exportCSVBtn = document.getElementById('exportCSV');
+        const resetButton = document.getElementById('resetButton');
+        const entryForm = document.getElementById('entryForm');
+        const currentDateInput = document.getElementById('currentDate');
+        const timeInInput = document.getElementById('timeIn');
+        const timeOutInput = document.getElementById('timeOut');
+        const activityListDiv = document.getElementById('activityList');
+        const addActivityBtn = document.getElementById('addActivityBtn');
+        const statusSelect = document.getElementById('status');
+        const saveButton = document.getElementById('saveButton');
+        const clearFormButton = document.getElementById('clearFormButton');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+        const monthFilterSelect = document.getElementById('monthFilter');
+        const clearFilterBtn = document.getElementById('clearFilterBtn');
+        const recordsListDiv = document.getElementById('recordsList');
+        const detailsModal = document.getElementById('detailsModal');
+        const modalContent = document.getElementById('modalContent');
+        const closeModalBtn = document.getElementById('closeModal');
+        const printButton = document.getElementById('printButton'); // Renamed from printButton in modal
+        const editButton = document.getElementById('editButton');
+        const deleteButton = document.getElementById('deleteButton');
+        const printPreviewModal = document.getElementById('printPreviewModal');
+        const closePrintModalBtn = document.getElementById('closePrintModal');
+        const printAreaDiv = document.getElementById('printArea');
+        const actualPrintButton = document.getElementById('actualPrintButton'); // Renamed from actualPrintButton
+        const downloadPDFButton = document.getElementById('downloadPDFButton'); // Renamed from downloadPDFButton
+
+        // --- State Variables ---
+        let records = [];
+        let editingRecordId = null; // Store the ID of the record being edited
+
+        // --- Initialization ---
+        loadRecords();
+        renderRecords();
+        updateTotalHours();
+        setDefaultDate();
+        setupEventListeners();
+
+        // --- Data Handling Functions ---
+        function loadRecords() {
+            try {
+                const storedRecords = localStorage.getItem('ojtRecords');
+                records = storedRecords ? JSON.parse(storedRecords) : [];
+                // Basic validation if needed: ensure it's an array
+                if (!Array.isArray(records)) {
+                    console.warn("Stored data was not an array, resetting.");
+                    records = [];
+                    saveRecords(); // Save the empty array
+                }
+                 console.log("Records loaded:", records.length);
+            } catch (error) {
+                console.error("Error loading records from localStorage:", error);
+                records = []; // Start fresh if loading fails
+                 alert("Could not load saved data. Starting fresh.");
+            }
+        }
+
+        function saveRecords() {
+            try {
+                localStorage.setItem('ojtRecords', JSON.stringify(records));
+                 console.log("Records saved:", records.length);
+            } catch (error) {
+                console.error("Error saving records to localStorage:", error);
+                alert("Error: Could not save data. Your changes might not persist.");
+            }
+        }
+
+        function generateId() {
+            // Simple timestamp-based ID + random element
+            return Date.now().toString(36) + Math.random().toString(36).substring(2);
+        }
+
+        // --- Calculation Functions ---
+        function calculateHoursWorked(timeInStr, timeOutStr) {
+            if (!timeInStr || !timeOutStr) return 0;
+
+            // Use a fixed date to compare times only
+            const fixedDate = '1970-01-01T';
+            const timeIn = new Date(fixedDate + timeInStr);
+            const timeOut = new Date(fixedDate + timeOutStr);
+
+            if (isNaN(timeIn) || isNaN(timeOut) || timeOut <= timeIn) {
+                console.warn("Invalid time range:", timeInStr, timeOutStr);
+                return 0; // Invalid times or no duration
+            }
+
+            let diffMilliseconds = timeOut - timeIn;
+
+            // Lunch break exclusion (12:00 PM - 1:00 PM = 12:00 to 13:00)
+            const lunchStart = new Date(fixedDate + '12:00:00');
+            const lunchEnd = new Date(fixedDate + '13:00:00');
+
+            // Check if the work period *completely contains* the lunch break
+            if (timeIn <= lunchStart && timeOut >= lunchEnd) {
+                diffMilliseconds -= (60 * 60 * 1000); // Subtract 1 hour in milliseconds
+            }
+            // Note: This strictly follows the "span this entire period" interpretation.
+            // Adjust if partial overlap should also deduct the hour.
+
+            return Math.max(0, diffMilliseconds / (1000 * 60 * 60)); // Return hours, ensure non-negative
+        }
+
+        function updateTotalHours() {
+            const total = records.reduce((sum, record) => {
+                // Only count hours for 'present' or 'late' statuses
+                if (record.status === 'present' || record.status === 'late') {
+                    // Use || 0 to handle cases where hoursWorked might be undefined/null in older data
+                    return sum + (record.hoursWorked || 0);
+                }
+                return sum;
+            }, 0);
+            totalHoursSpan.textContent = `Total Hours: ${total.toFixed(2)}`;
+        }
+
+        // --- Rendering Functions ---
+        function renderRecords() {
+            recordsListDiv.innerHTML = ''; // Clear existing list
+
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedMonth = monthFilterSelect.value;
+
+            const filteredRecords = records.filter(record => {
+                if (!record || !record.date) return false; // Basic check for valid record
+
+                 // Date parsing - Ensure consistent handling
+                 let recordDate;
+                 try {
+                     recordDate = new Date(record.date + 'T00:00:00'); // Avoid timezone issues
+                     if (isNaN(recordDate)) throw new Error("Invalid date format");
+                 } catch (e) {
+                     console.warn(`Skipping record with invalid date: ${record.date}`, record);
+                     return false;
+                 }
+
+                const recordMonth = (recordDate.getMonth() + 1).toString().padStart(2, '0');
+
+                // Apply month filter
+                const monthMatch = !selectedMonth || recordMonth === selectedMonth;
+                if (!monthMatch) return false;
+
+                // Apply search filter (check date, status, activities)
+                const searchMatch = !searchTerm ||
+                    record.date.includes(searchTerm) ||
+                    (record.status && record.status.toLowerCase().includes(searchTerm)) ||
+                    (record.activities && Array.isArray(record.activities) && record.activities.some(activity => activity.toLowerCase().includes(searchTerm)));
+
+                return searchMatch; // Only return if both filters match (or are inactive)
+
+            }).sort((a, b) => {
+                 // Sort by date descending (most recent first)
+                 // Add T00:00:00 to ensure consistent date comparison
+                try {
+                     return new Date(b.date + 'T00:00:00') - new Date(a.date + 'T00:00:00');
+                 } catch (e) {
+                     return 0; // Don't crash sorting if dates are bad
+                 }
+             });
+
+            if (filteredRecords.length === 0) {
+                 if (records.length === 0) {
+                    recordsListDiv.innerHTML = '<div class="text-gray-500 text-center py-8">No records yet. Add an entry!</div>';
+                 } else {
+                     recordsListDiv.innerHTML = '<div class="text-gray-500 text-center py-8">No records found matching your criteria.</div>';
+                 }
+                return;
+            }
+
+            filteredRecords.forEach(record => {
+                const recordElement = document.createElement('div');
+                // Added border-b for separation, removed mb-3 as padding handles spacing
+                recordElement.className = 'border-b border-gray-200 p-3 hover:bg-gray-100 cursor-pointer flex justify-between items-center text-sm';
+                recordElement.dataset.id = record.id; // Store ID for later use
+
+                const hoursDisplay = (record.status === 'present' || record.status === 'late') && typeof record.hoursWorked === 'number'
+                    ? `${record.hoursWorked.toFixed(2)} hrs`
+                    : 'N/A';
+                const statusClass = getStatusClass(record.status);
+                const formattedDate = formatDate(record.date); // Format date once
+
+                recordElement.innerHTML = `
+                    <div class="flex-grow pr-4">
+                        <span class="font-semibold text-gray-800">${formattedDate || 'Invalid Date'}</span>
+                        <span class="ml-2 px-2 py-0.5 text-xs rounded text-white ${statusClass} align-middle">${(record.status || 'N/A').toUpperCase()}</span>
+                        ${(record.status === 'present' || record.status === 'late') ?
+                            `<div class="text-xs text-gray-500 mt-1">
+                                ${formatTime(record.timeIn)} - ${formatTime(record.timeOut)}
+                            </div>` : ''
+                        }
+                    </div>
+                    <span class="text-gray-700 font-medium text-right min-w-[60px]">${hoursDisplay}</span>
+                `;
+
+                recordElement.addEventListener('click', () => showDetailsModal(record.id));
+                recordsListDiv.appendChild(recordElement);
+            });
+        }
+
+        function getStatusClass(status) {
+            switch (status) {
+                case 'present': return 'bg-green-500';
+                case 'absent': return 'bg-red-500';
+                case 'late': return 'bg-yellow-500'; // Changed from orange for better contrast maybe
+                case 'holiday': return 'bg-indigo-500'; // Changed from purple
+                default: return 'bg-gray-400';
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return null;
+             try {
+                const options = { year: 'numeric', month: 'short', day: 'numeric' };
+                // Add T00:00:00 to prevent timezone from shifting the date backward/forward
+                const date = new Date(dateString + 'T00:00:00');
+                 if (isNaN(date)) return "Invalid Date";
+                 return date.toLocaleDateString(undefined, options);
+            } catch (e) {
+                 console.error("Error formatting date:", dateString, e);
+                 return "Invalid Date";
+             }
+        }
+
+        function formatTime(timeString) {
+            if (!timeString) return 'N/A';
+             try {
+                 // Create a Date object with a fixed date part to use formatting functions
+                const date = new Date(`1970-01-01T${timeString}`);
+                 if (isNaN(date)) return "Invalid Time";
+                 return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+            } catch (e) {
+                 console.error("Error formatting time:", timeString, e);
+                 return "Invalid Time";
+             }
+        }
+
+        // --- Form Handling ---
+        function setDefaultDate() {
+            try {
+                const today = new Date();
+                // Adjust for timezone offset to get local date correctly
+                const offset = today.getTimezoneOffset();
+                const localDate = new Date(today.getTime() - (offset*60*1000));
+                currentDateInput.value = localDate.toISOString().split('T')[0];
+            } catch(e) {
+                console.error("Failed to set default date", e);
+                currentDateInput.value = ''; // Fallback to empty
+            }
+        }
+
+        function clearForm() {
+            entryForm.reset(); // Resets all form fields to default values
+            setDefaultDate(); // Set date back to today
+            statusSelect.value = 'present'; // Explicitly set default status
+
+            // Remove all but the first activity input
+            const activityInputs = activityListDiv.querySelectorAll('.flex.items-center');
+            activityInputs.forEach((div, index) => {
+                if (index === 0) {
+                    div.querySelector('.activity-input').value = ''; // Clear the first input
+                } else {
+                    div.remove(); // Remove extra activity fields
+                }
+            });
+            // Ensure there's at least one input field if all were removed somehow
+            if (activityListDiv.children.length === 0) {
+                addActivityInput();
+            }
+
+            editingRecordId = null; // Exit editing mode
+
+            // Reset save button appearance and text
+            saveButton.textContent = 'Save Entry';
+            saveButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+            saveButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            saveButton.innerHTML = '<i class="fas fa-save mr-2"></i>Save Entry'; // Restore icon and text
+            saveButton.disabled = false; // Re-enable button
+
+             // Hide clear form button briefly to give feedback
+             clearFormButton.textContent = 'Cleared!';
+             setTimeout(() => {
+                clearFormButton.innerHTML = '<i class="fas fa-undo mr-2"></i>Clear Form / Cancel Edit';
+             }, 1000);
+
+             currentDateInput.focus(); // Focus on the date field
+        }
+
+        function addActivityInput(value = '') {
+            const div = document.createElement('div');
+            div.className = 'flex items-center';
+            div.innerHTML = `
+                <input type="text" class="activity-input w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Enter an activity..." value="${value}">
+                <button type="button" class="remove-activity ml-2 text-red-500 hover:text-red-700 focus:outline-none flex-shrink-0" title="Remove activity"><i class="fas fa-times"></i></button>
+            `;
+            // Add remove listener immediately to the button inside the new div
+            div.querySelector('.remove-activity').addEventListener('click', (e) => {
+                // Prevent removing the last input field
+                if (activityListDiv.children.length > 1) {
+                    e.target.closest('.flex.items-center').remove();
+                } else {
+                    // Optionally clear the value instead of alerting
+                    e.target.closest('.flex.items-center').querySelector('.activity-input').value = '';
+                    // alert("You must have at least one activity field.");
+                }
+            });
+            activityListDiv.appendChild(div);
+        }
+
+        function handleSave(event) {
+            event.preventDefault(); // Prevent default form submission
+            saveButton.disabled = true; // Prevent double clicks
+            saveButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Saving...';
+
+
+            const date = currentDateInput.value;
+            const timeIn = timeInInput.value;
+            const timeOut = timeOutInput.value;
+            const status = statusSelect.value;
+            const activities = Array.from(activityListDiv.querySelectorAll('.activity-input'))
+                                .map(input => input.value.trim())
+                                .filter(activity => activity !== ''); // Filter out empty strings
+
+            // --- Validation ---
+            if (!date) {
+                alert('Please select a date.');
+                resetSaveButton();
+                return;
+            }
+
+            const requiresTimeAndActivity = (status === 'present' || status === 'late');
+
+            if (requiresTimeAndActivity) {
+                if (!timeIn || !timeOut) {
+                    alert('Please enter both Time In and Time Out for Present/Late status.');
+                    resetSaveButton();
+                    return;
+                }
+                if (timeOut <= timeIn) {
+                    alert('Time Out must be after Time In.');
+                    resetSaveButton();
+                    return;
+                }
+                 if (activities.length === 0) {
+                    alert('Please enter at least one activity done for Present/Late status.');
+                    resetSaveButton();
+                     return;
+                 }
+            }
+
+            // Check for duplicate date entry (only if NOT editing)
+            if (!editingRecordId) {
+                const existingRecord = records.find(record => record.date === date);
+                if (existingRecord) {
+                    alert('An entry for this date already exists. Please edit the existing entry or choose a different date.');
+                    resetSaveButton();
+                    return;
+                }
+            }
+
+            // --- Calculation ---
+            const hoursWorked = requiresTimeAndActivity
+                ? calculateHoursWorked(timeIn, timeOut)
+                : 0;
+
+            // --- Create or Update Record ---
+            const recordData = {
+                // id will be assigned/kept below
+                date,
+                timeIn: requiresTimeAndActivity ? timeIn : '',
+                timeOut: requiresTimeAndActivity ? timeOut : '',
+                activities: requiresTimeAndActivity ? activities : [],
+                status,
+                hoursWorked
+            };
+
+            let successMessage = '';
+
+            if (editingRecordId) {
+                // Update existing record
+                const index = records.findIndex(record => record.id === editingRecordId);
+                if (index !== -1) {
+                    records[index] = { ...records[index], ...recordData }; // Keep original ID
+                    successMessage = 'Record updated successfully!';
+                } else {
+                    console.error("Record to edit not found! ID:", editingRecordId);
+                    alert("Error: Could not find the record to update. Please refresh and try again.");
+                    editingRecordId = null; // Reset editing state
+                    resetSaveButton(); // Reset button state
+                    return; // Exit function
+                }
+            } else {
+                // Create new record
+                recordData.id = generateId();
+                records.push(recordData);
+                 successMessage = 'Record saved successfully!';
+            }
+
+            saveRecords();
+            renderRecords();
+            updateTotalHours();
+            clearForm(); // Clear form and reset editing state
+
+            // Provide visual feedback on success (optional)
+            // console.log(successMessage); // Log to console
+            // Maybe a temporary success message near the form?
+            resetSaveButton(); // Reset button after successful save and form clear
+
+        }
+
+         function resetSaveButton() {
+             // Reset button to its original state (Save or Update depending on context)
+             if (editingRecordId) {
+                 saveButton.textContent = 'Update Entry';
+                 saveButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                 saveButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                 saveButton.innerHTML = '<i class="fas fa-edit mr-2"></i>Update Entry';
+             } else {
+                 saveButton.textContent = 'Save Entry';
+                 saveButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                 saveButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                 saveButton.innerHTML = '<i class="fas fa-save mr-2"></i>Save Entry';
+             }
+             saveButton.disabled = false;
+         }
+
+
+        // --- Modal Functions ---
+        function showDetailsModal(id) {
+            const record = records.find(r => r.id === id);
+            if (!record) {
+                 console.error("Record not found for ID:", id);
+                 alert("Error: Could not find record details.");
+                 return;
+             }
+
+             const requiresTimeAndActivity = (record.status === 'present' || record.status === 'late');
+
+             modalContent.innerHTML = `
+                <p><strong>Date:</strong> ${formatDate(record.date) || 'N/A'}</p>
+                <p><strong>Status:</strong> <span class="px-2 py-0.5 text-xs rounded text-white ${getStatusClass(record.status)} align-middle">${(record.status || 'N/A').toUpperCase()}</span></p>
+                ${requiresTimeAndActivity ? `
+                    <hr class="my-2">
+                    <p><strong>Time In:</strong> ${formatTime(record.timeIn)}</p>
+                    <p><strong>Time Out:</strong> ${formatTime(record.timeOut)}</p>
+                    <p><strong>Hours Worked:</strong> ${record.hoursWorked?.toFixed(2) ?? 'N/A'}</p>
+                    <div class="mt-2"><strong>Activities Done:</strong>
+                        ${(record.activities && record.activities.length > 0)
+                            ? `<ul class="list-disc list-inside mt-1 ml-4 text-gray-600">${record.activities.map(act => `<li>${escapeHtml(act)}</li>`).join('')}</ul>`
+                            : '<span class="text-gray-500 ml-2">No activities logged.</span>'
+                        }
+                    </div>
+                ` : ''}
+            `;
+
+            // Store the id on the modal itself for the action buttons
+            detailsModal.dataset.recordId = id;
+            detailsModal.classList.remove('hidden');
+            detailsModal.focus(); // Focus modal for accessibility
+        }
+
+        function hideDetailsModal() {
+            detailsModal.classList.add('hidden');
+            detailsModal.dataset.recordId = ''; // Clear stored ID
+            modalContent.innerHTML = ''; // Clear content
+        }
+
+         function handleEdit() {
+             const recordId = detailsModal.dataset.recordId;
+             const record = records.find(r => r.id === recordId);
+             if (!record) {
+                 alert("Error: Cannot find record to edit.");
+                 return;
+             }
+
+             // Populate the main form
+             currentDateInput.value = record.date;
+             timeInInput.value = record.timeIn || '';
+             timeOutInput.value = record.timeOut || '';
+             statusSelect.value = record.status;
+
+             // Populate activities
+             activityListDiv.innerHTML = ''; // Clear existing activity fields
+             if (record.activities && Array.isArray(record.activities) && record.activities.length > 0) {
+                 record.activities.forEach(activity => addActivityInput(activity));
+             } else {
+                 addActivityInput(); // Add one empty field if no activities exist for this status
+             }
+
+             editingRecordId = recordId; // Set editing mode
+
+             // Change save button appearance and text
+             saveButton.textContent = 'Update Entry';
+             saveButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+             saveButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+             saveButton.innerHTML = '<i class="fas fa-edit mr-2"></i>Update Entry'; // Change icon too
+             saveButton.disabled = false;
+
+             hideDetailsModal(); // Close modal
+             window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll to top smoothly
+             currentDateInput.focus(); // Focus on first form field
+         }
+
+        function handleDelete() {
+            const recordId = detailsModal.dataset.recordId;
+            if (!recordId) return;
+
+            if (confirm('Are you sure you want to delete this entry? This action cannot be undone.')) {
+                records = records.filter(r => r.id !== recordId);
+                saveRecords();
+                renderRecords();
+                updateTotalHours();
+                hideDetailsModal();
+                // alert('Record deleted successfully.'); // Optional confirmation
+                 console.log('Record deleted:', recordId);
+            }
+        }
+
+        // --- Print & Export Functions ---
+
+        function showPrintPreviewModal() {
+            const recordId = detailsModal.dataset.recordId;
+            const record = records.find(r => r.id === recordId);
+            if (!record) {
+                alert("Error: Could not find record to print/preview.");
+                return;
+            }
+
+            const requiresTimeAndActivity = (record.status === 'present' || record.status === 'late');
+
+            // Populate print area
+            printAreaDiv.innerHTML = `
+                <h4 class="text-lg font-bold mb-4 text-center border-b pb-2">OJT Entry Details</h4>
+                <div class="space-y-2 text-base">
+                    <p><strong>Date:</strong> ${formatDate(record.date) || 'N/A'}</p>
+                    <p><strong>Status:</strong> <span class="font-semibold">${(record.status || 'N/A').toUpperCase()}</span></p>
+                     ${requiresTimeAndActivity ? `
+                        <hr class="my-2 border-t border-gray-300">
+                        <p><strong>Time In:</strong> ${formatTime(record.timeIn)}</p>
+                        <p><strong>Time Out:</strong> ${formatTime(record.timeOut)}</p>
+                        <p><strong>Hours Worked:</strong> ${record.hoursWorked?.toFixed(2) ?? 'N/A'}</p>
+                        <div class="mt-2"><strong>Activities Done:</strong>
+                            ${(record.activities && record.activities.length > 0)
+                                ? `<ul class="list-disc list-inside mt-1 ml-5 text-gray-800">${record.activities.map(act => `<li>${escapeHtml(act)}</li>`).join('')}</ul>`
+                                : '<span class="text-gray-600 ml-2 italic">No activities logged.</span>'
+                            }
+                        </div>
+                    ` : ''}
+                </div>
+                <p class="text-xs text-gray-500 mt-6 pt-2 border-t text-center">Generated by OJT Tracker on ${new Date().toLocaleString()}</p>
+            `;
+            printPreviewModal.dataset.recordId = recordId; // Store ID if needed for PDF download name
+            printPreviewModal.classList.remove('hidden');
+            hideDetailsModal(); // Hide the details modal when opening print preview
+        }
+
+        function hidePrintPreviewModal() {
+            printPreviewModal.classList.add('hidden');
+            printAreaDiv.innerHTML = ''; // Clear content
+        }
+
+        function handleActualPrint() {
+            // Uses browser's print functionality combined with @media print CSS
+             // Temporarily hide the main modal if it's somehow still open
+             detailsModal.classList.add('hidden');
+             printPreviewModal.classList.add('print-mode'); // Add class for potential finer print control
+
+             window.print();
+
+             // Remove class after print dialog is likely closed/handled
+             setTimeout(() => {
+                 printPreviewModal.classList.remove('print-mode');
+             }, 500);
+        }
+
+        function handleDownloadSinglePDF() {
+            if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+                alert("PDF generation libraries not loaded. Cannot download PDF.");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const elementToCapture = printAreaDiv; // Capture the preview content
+            const recordId = printPreviewModal.dataset.recordId;
+            const record = records.find(r => r.id === recordId);
+            const filename = record ? `OJT_Entry_${record.date}.pdf` : 'OJT_Entry_Details.pdf';
+
+             // Add temporary class for potential styling adjustments before capture
+             elementToCapture.classList.add('pdf-capture-mode');
+             downloadPDFButton.disabled = true;
+             downloadPDFButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Generating...';
+
+
+             html2canvas(elementToCapture, {
+                 scale: 2, // Increase scale for better resolution
+                 useCORS: true, // If there were external images (though unlikely here)
+                 logging: false // Reduce console noise
+             })
+             .then(canvas => {
+                 const imgData = canvas.toDataURL('image/png');
+                 const pdf = new jsPDF({
+                     orientation: 'portrait',
+                     unit: 'mm',
+                     format: 'a4' // Standard A4 size
+                 });
+
+                 const pdfWidth = pdf.internal.pageSize.getWidth();
+                 const pdfHeight = pdf.internal.pageSize.getHeight();
+                 const margin = 15; // Page margin in mm
+                 const contentWidth = pdfWidth - (2 * margin);
+                 // Calculate image height based on aspect ratio to fit width
+                 const imgWidth = canvas.width;
+                 const imgHeight = canvas.height;
+                 const aspectRatio = imgWidth / imgHeight;
+                 let pdfImgWidth = contentWidth;
+                 let pdfImgHeight = pdfImgWidth / aspectRatio;
+
+                 // Check if height exceeds page limits, if so scale by height instead
+                 if (pdfImgHeight > (pdfHeight - 2 * margin)) {
+                    pdfImgHeight = pdfHeight - 2 * margin;
+                    pdfImgWidth = pdfImgHeight * aspectRatio;
+                 }
+
+                 // Center the image horizontally and vertically (optional)
+                 const xPos = (pdfWidth - pdfImgWidth) / 2;
+                 const yPos = margin; // Start near top margin
+
+
+                 pdf.addImage(imgData, 'PNG', xPos, yPos, pdfImgWidth, pdfImgHeight);
+                 pdf.save(filename);
+
+                 // Cleanup and reset button
+                 elementToCapture.classList.remove('pdf-capture-mode');
+                 downloadPDFButton.disabled = false;
+                 downloadPDFButton.innerHTML = '<i class="fas fa-file-pdf mr-1"></i> Download as PDF';
+
+             })
+             .catch(error => {
+                 console.error("Error generating PDF with html2canvas:", error);
+                 alert("Failed to generate PDF. The entry might be too complex to render, or there was a script error. Please check the console (F12).");
+                 // Cleanup and reset button on error
+                 elementToCapture.classList.remove('pdf-capture-mode');
+                 downloadPDFButton.disabled = false;
+                 downloadPDFButton.innerHTML = '<i class="fas fa-file-pdf mr-1"></i> Download as PDF';
+             });
+        }
+
+        function exportToCSV() {
+             if (records.length === 0) {
+                 alert("No records to export.");
+                 return;
+             }
+
+            const headers = ['Date', 'Status', 'Time In', 'Time Out', 'Hours Worked', 'Activities'];
+
+            // Sort records by date before exporting
+            const sortedRecords = [...records].sort((a, b) => {
+                try { return new Date(a.date + 'T00:00:00') - new Date(b.date + 'T00:00:00'); } catch(e) { return 0; }
+            });
+
+            const rows = sortedRecords.map(record => {
+                const requiresTimeAndActivity = (record.status === 'present' || record.status === 'late');
+                const timeInFormatted = requiresTimeAndActivity ? formatTime(record.timeIn) : 'N/A';
+                const timeOutFormatted = requiresTimeAndActivity ? formatTime(record.timeOut) : 'N/A';
+                const hoursWorkedFormatted = requiresTimeAndActivity && typeof record.hoursWorked === 'number'
+                    ? record.hoursWorked.toFixed(2)
+                    : 'N/A';
+                // Join activities, handle quotes if activities contain commas or quotes
+                const activitiesFormatted = (requiresTimeAndActivity && Array.isArray(record.activities))
+                    ? record.activities
+                        .map(act => `"${(act || '').replace(/"/g, '""')}"`) // Escape double quotes and enclose in quotes
+                        .join('; ') // Use semicolon as separator *within* the cell for readability
+                    : 'N/A';
+
+                // Return array matching headers order
+                return [
+                    record.date || 'N/A',
+                    record.status || 'N/A',
+                    timeInFormatted,
+                    timeOutFormatted,
+                    hoursWorkedFormatted,
+                    activitiesFormatted // This is a single field potentially containing multiple quoted activities
+                ];
+            });
+
+            // Function to join row data correctly for CSV
+            const formatRow = row => row.map(field => {
+                // Although activities are pre-quoted, double check other fields just in case
+                const stringField = String(field);
+                // If field contains comma, newline, or double quote, enclose in double quotes and escape internal quotes
+                if (stringField.includes(',') || stringField.includes('\n') || stringField.includes('"')) {
+                    return `"${stringField.replace(/"/g, '""')}"`;
+                }
+                return stringField;
+            }).join(',');
+
+            let csvContent = "data:text/csv;charset=utf-8,"
+                + headers.join(",") + "\n" // Header row
+                + rows.map(formatRow).join("\n"); // Data rows
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `ojt_records_${getCurrentDateFormatted()}.csv`);
+            document.body.appendChild(link); // Required for Firefox
+            link.click();
+            document.body.removeChild(link); // Clean up
+        }
+
+
+        function exportToPDF() {
+             if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF.API.autoTable === 'undefined') {
+                 alert("PDF generation libraries not loaded correctly. Cannot export table to PDF.");
+                 return;
+             }
+             if (records.length === 0) {
+                 alert("No records to export.");
+                 return;
+             }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape' }); // Use landscape for potentially wide table
+
+            const tableColumn = ["Date", "Status", "Time In", "Time Out", "Hours", "Activities"];
+            const tableRows = [];
+
+            // Sort records by date before exporting
+            const sortedRecords = [...records].sort((a, b) => {
+                 try { return new Date(a.date + 'T00:00:00') - new Date(b.date + 'T00:00:00'); } catch(e) { return 0; }
+            });
+
+
+            sortedRecords.forEach(record => {
+                const requiresTimeAndActivity = (record.status === 'present' || record.status === 'late');
+                const timeInFormatted = requiresTimeAndActivity ? formatTime(record.timeIn) : 'N/A';
+                const timeOutFormatted = requiresTimeAndActivity ? formatTime(record.timeOut) : 'N/A';
+                const hoursWorkedFormatted = requiresTimeAndActivity && typeof record.hoursWorked === 'number'
+                    ? record.hoursWorked.toFixed(2)
+                    : 'N/A';
+                // Join activities with a simple comma for the PDF table (less critical than CSV quoting)
+                const activitiesString = (requiresTimeAndActivity && Array.isArray(record.activities))
+                                         ? record.activities.join('; ') // Use semicolon for PDF clarity too
+                                         : 'N/A';
+
+                const recordData = [
+                    formatDate(record.date) || 'N/A',
+                    record.status || 'N/A',
+                    timeInFormatted,
+                    timeOutFormatted,
+                    hoursWorkedFormatted,
+                    activitiesString // Wrap handled by autoTable if needed
+                ];
+                tableRows.push(recordData);
+            });
+
+            // Add Title
+            doc.setFontSize(18);
+            doc.text("OJT Records Summary", 14, 20);
+
+            // Add total hours information below title
+            const totalHoursText = totalHoursSpan.textContent; // Get current total hours text
+            doc.setFontSize(12);
+            doc.setTextColor(100); // Grey text
+            doc.text(totalHoursText, 14, 28);
+
+             // Add generated date
+             doc.setFontSize(9);
+             doc.setTextColor(150);
+             doc.text(`Generated on: ${new Date().toLocaleString()}`, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right'});
+
+
+             // Generate table using autoTable plugin
+             try {
+                doc.autoTable({
+                    head: [tableColumn],
+                    body: tableRows,
+                    startY: 35, // Start table below the title and total hours
+                    theme: 'striped', // 'striped', 'grid', 'plain'
+                    headStyles: { fillColor: [22, 160, 133], textColor: 255 }, // Example header color (teal)
+                    margin: { top: 35, right: 14, bottom: 15, left: 14 },
+                    styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' }, // Use linebreak to wrap text
+                    columnStyles: {
+                        0: { cellWidth: 25 }, // Date
+                        1: { cellWidth: 20 }, // Status
+                        2: { cellWidth: 25 }, // Time In
+                        3: { cellWidth: 25 }, // Time Out
+                        4: { cellWidth: 15, halign: 'right' }, // Hours
+                        5: { cellWidth: 'auto' } // Activities (auto width)
+                    },
+                    didDrawPage: function (data) {
+                      // Add footer on each page
+                      let footerStr = `Page ${doc.internal.getNumberOfPages()}`;
+                      doc.setFontSize(8);
+                      doc.setTextColor(150);
+                      doc.text(footerStr, data.settings.margin.left, doc.internal.pageSize.getHeight() - 8);
+                  }
+                });
+            } catch (error) {
+                 console.error("Error generating PDF table with autoTable:", error);
+                 alert("An error occurred while generating the PDF table. Please check the console (F12).");
+                 return; // Stop execution if table fails
+             }
+
+            // Save the PDF
+            doc.save(`ojt_records_summary_${getCurrentDateFormatted()}.pdf`);
+        }
+
+        // --- Helper Functions ---
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function getCurrentDateFormatted() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            // Form submission
+            entryForm.addEventListener('submit', handleSave);
+            clearFormButton.addEventListener('click', clearForm); // Use the clear form function
+
+            // Activity add/remove (using event delegation on the parent div)
+            addActivityBtn.addEventListener('click', () => addActivityInput());
+            // Listener for remove button clicks within the activity list
+            activityListDiv.addEventListener('click', (e) => {
+                // Find the closest remove button ancestor
+                const removeButton = e.target.closest('.remove-activity');
+                if (removeButton) {
+                     // Prevent removing the last input field
+                     if (activityListDiv.children.length > 1) {
+                         removeButton.closest('.flex.items-center').remove();
+                     } else {
+                        // Clear the value of the last field instead of removing it
+                         removeButton.closest('.flex.items-center').querySelector('.activity-input').value = '';
+                     }
+                }
+            });
+
+            // Filtering and Searching
+            searchInput.addEventListener('input', renderRecords); // Use input for real-time search
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                renderRecords(); // Re-render after clearing search
+            });
+            monthFilterSelect.addEventListener('change', () => {
+                 renderRecords();
+                 clearFilterBtn.classList.toggle('hidden', !monthFilterSelect.value); // Show/hide clear button based on selection
+             });
+             clearFilterBtn.addEventListener('click', () => {
+                 monthFilterSelect.value = ''; // Reset dropdown
+                 clearFilterBtn.classList.add('hidden'); // Hide button
+                 renderRecords(); // Re-render
+             });
+
+
+            // Modal actions (Details Modal)
+            closeModalBtn.addEventListener('click', hideDetailsModal);
+            deleteButton.addEventListener('click', handleDelete);
+            editButton.addEventListener('click', handleEdit);
+            printButton.addEventListener('click', showPrintPreviewModal); // Changed from printButton
+
+            // Print Preview Modal Actions
+            closePrintModalBtn.addEventListener('click', hidePrintPreviewModal);
+            actualPrintButton.addEventListener('click', handleActualPrint); // Changed from actualPrintButton
+            downloadPDFButton.addEventListener('click', handleDownloadSinglePDF); // Changed from downloadPDFButton
+
+            // Navbar actions
+            resetButton.addEventListener('click', () => {
+                if (confirm('⚠️ Are you sure you want to delete ALL data?\nThis action is irreversible!')) {
+                    if (confirm('⚠️ FINAL CONFIRMATION: Delete all OJT records?')) {
+                        records = [];
+                        localStorage.removeItem('ojtRecords'); // Clear storage
+                        renderRecords();
+                        updateTotalHours();
+                        clearForm(); // Also clear the form
+                        alert('All data has been permanently deleted.');
+                    }
+                }
+            });
+            exportCSVBtn.addEventListener('click', exportToCSV);
+            exportPDFBtn.addEventListener('click', exportToPDF); // This is the "Export All (PDF)" button
+
+            // Close modals if clicked on the background overlay
+            detailsModal.addEventListener('click', (e) => {
+                if (e.target === detailsModal) { // Check if the click is directly on the overlay
+                    hideDetailsModal();
+                }
+            });
+            printPreviewModal.addEventListener('click', (e) => {
+                if (e.target === printPreviewModal) { // Check if the click is directly on the overlay
+                     hidePrintPreviewModal();
+                }
+            });
+
+            // Keyboard accessibility for modals
+             detailsModal.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    hideDetailsModal();
+                }
+             });
+             printPreviewModal.addEventListener('keydown', (e) => {
+                 if (e.key === 'Escape') {
+                     hidePrintPreviewModal();
+                 }
+             });
+
+        }
+    });
+
+ </script>
+ </body>
+ </html>
